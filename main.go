@@ -15,20 +15,20 @@ import (
 var categories = map[string][]string{
 	"recent": {
 		"https://api-berita-indonesia.vercel.app/antara/terbaru",
-		// "https://api-berita-indonesia.vercel.app/cnbc/terbaru",
-		// "https://api-berita-indonesia.vercel.app/cnn/terbaru",
+		"https://api-berita-indonesia.vercel.app/cnbc/terbaru",
+		"https://api-berita-indonesia.vercel.app/cnn/terbaru",
 	},
-	// "national": {
-	// 	"https://api-berita-indonesia.vercel.app/tempo/nasional",
-	// 	"https://api-berita-indonesia.vercel.app/sindonews/nasional",
-	// 	"https://api-berita-indonesia.vercel.app/cnn/nasional",
-	// },
-	// "business": {
-	// 	"https://api-berita-indonesia.vercel.app/tempo/bisnis",
-	// 	"https://api-berita-indonesia.vercel.app/antara/ekonomi",
-	// 	"https://api-berita-indonesia.vercel.app/cnn/ekonomi",
-	// 	"https://api-berita-indonesia.vercel.app/sindonews/ekbis",
-	// },
+	"national": {
+		"https://api-berita-indonesia.vercel.app/tempo/nasional",
+		"https://api-berita-indonesia.vercel.app/sindonews/nasional",
+		"https://api-berita-indonesia.vercel.app/cnn/nasional",
+	},
+	"business": {
+		"https://api-berita-indonesia.vercel.app/tempo/bisnis",
+		"https://api-berita-indonesia.vercel.app/antara/ekonomi",
+		"https://api-berita-indonesia.vercel.app/cnn/ekonomi",
+		"https://api-berita-indonesia.vercel.app/sindonews/ekbis",
+	},
 }
 
 func normalizeSource(source string) string {
