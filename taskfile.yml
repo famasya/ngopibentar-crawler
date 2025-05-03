@@ -1,0 +1,32 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the Go application
+    cmds:
+      - go build -o ./tmp/main .
+
+  run:
+    desc: Run the Go application (without auto-refresh)
+    cmds:
+      - ./tmp/main
+
+  dev:
+    desc: Run the Go application with auto-refresh using Air
+    cmds:
+      - air
+
+  format:
+    desc: Format Go code using gofmt
+    cmds:
+      - go fmt ./...
+
+  lint:
+    desc: Run static analysis using golangci-lint (if installed)
+    cmds:
+      - command -v golangci-lint &> /dev/null && golangci-lint run ./... || echo "golangci-lint not found. Please install it."
+
+  clean:
+    desc: Clean up build artifacts
+    cmds:
+      - rm -rf tmp
