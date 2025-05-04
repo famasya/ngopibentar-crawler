@@ -4,34 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"google.golang.org/genai"
 )
 
 type Summarizer struct {
-	Source   string `json:"source"`
-	Title    string `json:"title"`
-	Content  string `json:"content"`
-	Link     string `json:"link"`
-	Category string `json:"category"`
+	Source  string `json:"source"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+	Link    string `json:"link"`
 }
 
 type AIResponse struct {
-	Content string   `json:"content"`
-	Sources []string `json:"sources"`
-	Title   string   `json:"title"`
+	Excerpt     string   `json:"excerpt"`
+	LongContent string   `json:"long_content"`
+	Sources     []string `json:"sources"`
+	Title       string   `json:"title"`
+	Category    string   `json:"category"`
 }
 
 type SummarizerResponse struct {
-	Summary  []AIResponse `json:"summary"`
+	Articles []AIResponse `json:"articles"`
 	AiModel  string       `json:"ai_model"`
 	Category string       `json:"category"`
 }
 
 type GeminiResponse struct {
-	Summary []AIResponse `json:"summary"`
+	Articles []AIResponse `json:"articles"`
 }
 
 func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
@@ -54,7 +54,7 @@ func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
 		return nil, fmt.Errorf("error marshaling payload: %v", err)
 	}
 
-	slog.Info("Generating content")
+	logger.Info("Generating content")
 	parts := []*genai.Part{
 		{Text: string(jsonPayload)},
 	}
@@ -71,7 +71,7 @@ func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
 			ResponseSchema: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"summary": {
+					"articles": {
 						Type: genai.TypeArray,
 						Items: &genai.Schema{
 							Type: genai.TypeObject,
@@ -79,7 +79,10 @@ func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
 								"title": {
 									Type: genai.TypeString,
 								},
-								"content": {
+								"excerpt": {
+									Type: genai.TypeString,
+								},
+								"long_content": {
 									Type: genai.TypeString,
 								},
 								"sources": {
@@ -88,12 +91,16 @@ func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
 										Type: genai.TypeString,
 									},
 								},
+								"category": {
+									Type: genai.TypeString,
+									Enum: []string{"national", "international", "entertainment", "sports", "technology", "business", "politics"},
+								},
 							},
-							Required: []string{"title", "content", "sources"},
+							Required: []string{"title", "excerpt", "long_content", "sources", "category"},
 						},
 					},
 				},
-				Required: []string{"summary"},
+				Required: []string{"articles"},
 			},
 		})
 	if err != nil {
@@ -105,14 +112,14 @@ func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
 	}
 
 	var response GeminiResponse
+	logger.Debug("summarization result", "result", result.Candidates[0].Content.Parts[0].Text)
 	err = json.Unmarshal([]byte(result.Candidates[0].Content.Parts[0].Text), &response)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling result: %v", err)
 	}
 
 	return &SummarizerResponse{
-		Summary:  response.Summary,
+		Articles: response.Articles,
 		AiModel:  aiModel,
-		Category: payload[0].Category,
 	}, nil
 }

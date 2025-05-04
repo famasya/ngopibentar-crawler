@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -11,20 +10,15 @@ import (
 )
 
 type Response struct {
-	Success bool        `json:"success"`
-	Message interface{} `json:"message"`
-	Data    struct {
-		Link        string `json:"link"`
-		Description string `json:"description"`
-		Title       string `json:"title"`
-		Posts       []struct {
-			Link        string    `json:"link"`
-			Title       string    `json:"title"`
-			PubDate     time.Time `json:"pubDate"`
-			Description string    `json:"description"`
-			Thumbnail   string    `json:"thumbnail"`
-		} `json:"posts"`
-	} `json:"data"`
+	AvailableCategories []string  `json:"available_categories"`
+	CachedAt            time.Time `json:"cached_at"`
+	Items               []struct {
+		Title       string    `json:"title"`
+		Link        string    `json:"link"`
+		Description string    `json:"description"`
+		PublishedAt time.Time `json:"published_at"`
+		Thumbnail   string    `json:"thumbnail"`
+	} `json:"items"`
 }
 
 type CrawlerResult struct {
@@ -40,47 +34,42 @@ func StartCrawler(url string, client *resty.Client) (*[]CrawlerResult, error) {
 		SetResult(&response).
 		Get(url)
 	if err != nil {
-		slog.Error("Error fetching URL [1]", "url", url, "error", err)
-		return nil, err
-	}
-
-	if !response.Success {
-		slog.Error("Error fetching URL [2]", "url", url, "message", response.Message)
+		logger.Error("Error fetching URL [1]", "url", url, "error", err)
 		return nil, err
 	}
 
 	var results []CrawlerResult
-	for _, post := range response.Data.Posts[:2] {
+	for _, post := range response.Items[:2] {
 		var content *string
 		switch {
-		case strings.Contains(post.Link, "antara"):
-			content, err = GetContentAntara(post.Link, client)
+		case strings.Contains(post.Link, "kompas"):
+			content, err = GetContentKompas(post.Link+"?page=all", client)
 			if err != nil {
-				slog.Error("Error fetching content [3]", "url", post.Link, "error", err)
+				logger.Error("Error fetching content [3]", "url", post.Link, "error", err)
 				continue
 			}
-		case strings.Contains(post.Link, "tempo"):
-			content, err = GetContentTempo(post.Link, client)
+		case strings.Contains(post.Link, "liputan6"):
+			content, err = GetContentLiputan6(post.Link, client)
 			if err != nil {
-				slog.Error("Error fetching content [3]", "url", post.Link, "error", err)
+				logger.Error("Error fetching content [3]", "url", post.Link, "error", err)
 				continue
 			}
 		case strings.Contains(post.Link, "cnbc"):
 			content, err = GetContentCNBC(post.Link, client)
 			if err != nil {
-				slog.Error("Error fetching content [3]", "url", post.Link, "error", err)
+				logger.Error("Error fetching content [3]", "url", post.Link, "error", err)
 				continue
 			}
 		case strings.Contains(post.Link, "cnn"):
 			content, err = GetContentCNN(post.Link, client)
 			if err != nil {
-				slog.Error("Error fetching content [3]", "url", post.Link, "error", err)
+				logger.Error("Error fetching content [3]", "url", post.Link, "error", err)
 				continue
 			}
-		case strings.Contains(post.Link, "sindonews"):
-			content, err = GetContentSindonews(post.Link, client)
+		case strings.Contains(post.Link, "kumparan"):
+			content, err = GetContentKumparan(post.Link+"/full", client)
 			if err != nil {
-				slog.Error("Error fetching content [3]", "url", post.Link, "error", err)
+				logger.Error("Error fetching content [3]", "url", post.Link, "error", err)
 				continue
 			}
 		}
@@ -89,32 +78,31 @@ func StartCrawler(url string, client *resty.Client) (*[]CrawlerResult, error) {
 			Title:       post.Title,
 			Content:     *content,
 			Link:        post.Link,
-			PublishedAt: post.PubDate,
+			PublishedAt: post.PublishedAt,
 		})
 	}
 
 	return &results, nil
 }
 
-func GetContentAntara(url string, client *resty.Client) (*string, error) {
-	slog.Info("--> Processing URL", "url", url)
+func GetContentKompas(url string, client *resty.Client) (*string, error) {
+	logger.Info("--> Processing URL", "url", url)
 	response, err := client.R().
 		Get(url)
 	if err != nil {
-		slog.Error("Error fetching content [1]", "url", url, "error", err)
+		logger.Error("Error fetching content [1]", "url", url, "error", err)
 		return nil, err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		slog.Error("Error fetching content [2]", "url", url, "error", err)
+		logger.Error("Error fetching content [2]", "url", url, "error", err)
 		return nil, err
 	}
 
 	var content string
-	doc.Find(".post-content p").Each(func(i int, s *goquery.Selection) {
-		// ignore if it contains `script` or it contains `.text-muted` class or it contains `span.baca-juga`
-		if s.Has("script").Length() > 0 || s.HasClass("text-muted") || s.Find("span.baca-juga").Length() > 0 {
+	doc.Find(".read__content p").Each(func(i int, s *goquery.Selection) {
+		if strings.Contains(s.Text(), "Baca juga") {
 			return
 		}
 		content += s.Text() + " "
@@ -126,27 +114,23 @@ func GetContentAntara(url string, client *resty.Client) (*string, error) {
 	return &trimmed, nil
 }
 
-func GetContentTempo(url string, client *resty.Client) (*string, error) {
-	slog.Info("--> Processing URL", "url", url)
+func GetContentLiputan6(url string, client *resty.Client) (*string, error) {
+	logger.Info("--> Processing URL", "url", url)
 	response, err := client.R().
 		Get(url)
 	if err != nil {
-		slog.Error("Error fetching content [1]", "url", url, "error", err)
+		logger.Error("Error fetching content [1]", "url", url, "error", err)
 		return nil, err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		slog.Error("Error fetching content [2]", "url", url, "error", err)
+		logger.Error("Error fetching content [2]", "url", url, "error", err)
 		return nil, err
 	}
 
 	var content string
-	doc.Find("#content-wrapper").Each(func(i int, s *goquery.Selection) {
-		// ignore if it contains "Pilihan Editor" or "berkontribusi dalam penulisan artikel ini"
-		if strings.Contains(s.Text(), "Pilihan Editor") || strings.Contains(s.Text(), "berkontribusi dalam penulisan artikel ini") {
-			return
-		}
+	doc.Find(".article-content-body__item-content p").Each(func(i int, s *goquery.Selection) {
 		content += s.Text() + " "
 	})
 
@@ -157,17 +141,17 @@ func GetContentTempo(url string, client *resty.Client) (*string, error) {
 }
 
 func GetContentCNBC(url string, client *resty.Client) (*string, error) {
-	slog.Info("--> Processing URL", "url", url)
+	logger.Info("--> Processing URL", "url", url)
 	response, err := client.R().
 		Get(url)
 	if err != nil {
-		slog.Error("Error fetching content [1]", "url", url, "error", err)
+		logger.Error("Error fetching content [1]", "url", url, "error", err)
 		return nil, err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		slog.Error("Error fetching content [2]", "url", url, "error", err)
+		logger.Error("Error fetching content [2]", "url", url, "error", err)
 		return nil, err
 	}
 
@@ -187,17 +171,17 @@ func GetContentCNBC(url string, client *resty.Client) (*string, error) {
 }
 
 func GetContentCNN(url string, client *resty.Client) (*string, error) {
-	slog.Info("--> Processing URL", "url", url)
+	logger.Info("--> Processing URL", "url", url)
 	response, err := client.R().
 		Get(url)
 	if err != nil {
-		slog.Error("Error fetching content [1]", "url", url, "error", err)
+		logger.Error("Error fetching content [1]", "url", url, "error", err)
 		return nil, err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		slog.Error("Error fetching content [2]", "url", url, "error", err)
+		logger.Error("Error fetching content [2]", "url", url, "error", err)
 		return nil, err
 	}
 
@@ -216,8 +200,8 @@ func GetContentCNN(url string, client *resty.Client) (*string, error) {
 	return &trimmed, nil
 }
 
-func GetContentSindonews(url string, client *resty.Client) (*string, error) {
-	slog.Info("--> Processing URL", "url", url)
+func GetContentKumparan(url string, client *resty.Client) (*string, error) {
+	logger.Info("--> Processing URL", "url", url)
 	response, err := client.R().
 		Get(url)
 	if err != nil {
@@ -226,12 +210,12 @@ func GetContentSindonews(url string, client *resty.Client) (*string, error) {
 
 	doc, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		slog.Error("Error fetching content [2]", "url", url, "error", err)
+		logger.Error("Error fetching content [2]", "url", url, "error", err)
 		return nil, err
 	}
 
 	var content string
-	doc.Find(".detail-desc").Each(func(i int, s *goquery.Selection) {
+	doc.Find("span[data-qa-id=story-paragraph]").Each(func(i int, s *goquery.Selection) {
 		content += s.Text() + " "
 	})
 

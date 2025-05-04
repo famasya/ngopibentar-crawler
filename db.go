@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,20 +11,34 @@ import (
 
 func initMigration(db *sql.DB) {
 	// create table if not exists
-	slog.Info("Creating table articles")
+	logger.Debug("running migration 1")
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS articles (
+			id BIGINT PRIMARY KEY NOT NULL,
 			title TEXT NOT NULL,
-			content TEXT NOT NULL,
-			sources TEXT NOT NULL,
+			excerpt TEXT NOT NULL,
+			long_content TEXT NOT NULL,
+			sources TEXT NOT NULL, -- comma separated
+			links TEXT NOT NULL, -- comma separated
 			category TEXT NOT NULL,
 			ai_model TEXT NOT NULL,
+			publishers TEXT NOT NULL,
 			created_at TEXT NOT NULL
-		)
+		);
+
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_id ON articles(id);
 	`)
 	if err != nil {
-		slog.Error("Error creating table articles", "error", err)
+		logger.Error("Error creating table articles", "error", err)
 		os.Exit(1)
+	}
+
+	logger.Debug("running migration 2")
+	_, err = db.Exec(`
+		ALTER TABLE articles DROP COLUMN publishers;
+	`)
+	if err != nil {
+		logger.Debug("Error altering table articles", "error", err)
 	}
 }
 
@@ -35,7 +48,7 @@ func InitDB() (*sql.DB, func(), error) {
 	authToken := os.Getenv("TURSO_AUTH_TOKEN")
 
 	dbPath := filepath.Join("./", dbName)
-	slog.Info("Using database path", "path", dbPath)
+	logger.Info("Using database path", "path", dbPath)
 
 	// Create connector with sync interval
 	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryUrl,
@@ -54,9 +67,9 @@ func InitDB() (*sql.DB, func(), error) {
 
 	// Create cleanup function to be called later
 	cleanup := func() {
-		slog.Info("Cleaning up database resources")
+		logger.Info("Cleaning up database resources")
 		if err := db.Close(); err != nil {
-			slog.Error("Error closing database", "error", err)
+			logger.Error("Error closing database", "error", err)
 		}
 	}
 
