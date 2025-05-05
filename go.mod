@@ -1,4 +1,4 @@
-module sambilmakan-crawler
+module ngopibentar-crawler
 
 go 1.24.0
 
@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/godruoyi/go-snowflake v0.0.2
 	github.com/joho/godotenv v1.5.1
+	github.com/samber/lo v1.50.0
 	github.com/tursodatabase/go-libsql v0.0.0-20250416102726-983f7e9acb0e
 	google.golang.org/genai v1.3.0
 	resty.dev/v3 v3.0.0-beta.2

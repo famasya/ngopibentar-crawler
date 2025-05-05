@@ -25,23 +25,6 @@ var targets = []string{
 	"https://news-api-id.abidf.com/rss/cnbc/market",
 }
 
-func normalizeSource(source string) string {
-	switch {
-	case strings.Contains(source, "kompas"):
-		return "Kompas"
-	case strings.Contains(source, "cnn"):
-		return "CNN"
-	case strings.Contains(source, "liputan6"):
-		return "Liputan6"
-	case strings.Contains(source, "kumparan"):
-		return "Kumparan"
-	case strings.Contains(source, "cnbc"):
-		return "CNBC"
-	default:
-		return source
-	}
-}
-
 var logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 	Level: slog.LevelDebug,
 }))
@@ -57,10 +40,13 @@ func main() {
 		log.Fatal("Error initializing database")
 	}
 	defer cleanup()
-	var client = resty.New()
+	var client = resty.New().
+		SetRetryCount(3).
+		SetRetryWaitTime(2 * time.Second).
+		SetRetryMaxWaitTime(10 * time.Second)
 	var wg sync.WaitGroup
 
-	var rawArticles []Summarizer
+	var rawArticles []CrawlerResult
 	for _, target := range targets {
 		wg.Add(1)
 		go func(target string) {
@@ -70,41 +56,58 @@ func main() {
 				logger.Error("Error fetching URL", "url", target, "error", err)
 				return
 			}
-			for _, article := range *articles {
-				rawArticles = append(rawArticles, Summarizer{
-					Source:  normalizeSource(article.Link),
-					Title:   article.Title,
-					Content: article.Content,
-					Link:    article.Link,
-				})
-			}
+			rawArticles = append(rawArticles, *articles...)
 		}(target)
 	}
 
 	wg.Wait()
-	summarizerResponse, err := Summarize(rawArticles)
+	logger.Debug("Raw articles", "articles", rawArticles)
+	groups, err := Grouper(rawArticles)
 	if err != nil {
-		logger.Error("Error summarizing articles", "error", err)
+		logger.Error("Error grouping articles", "error", err)
 		os.Exit(1)
 	}
 
-	// save to db
-	createdAt := time.Now().Format("2006-01-02 15:04:05")
-	for _, article := range summarizerResponse.Articles {
-		id := int64(snowflake.ID())
-		// normalize sources
-		var sources []string
-		for _, source := range article.Sources {
-			sources = append(sources, normalizeSource(source))
+	// sleep for 3 second
+	logger.Debug("Sleeping for 3 second")
+	time.Sleep(3 * time.Second)
+
+	// summarize each group
+	for _, group := range groups.Groups {
+		var articles []Summarizer
+		for _, g := range group {
+			articles = append(articles, Summarizer{
+				Source:  g.Source,
+				Title:   g.Title,
+				Content: g.Content,
+				Link:    g.Link,
+			})
+		}
+		summarizerResponse, err := Summarize(articles)
+		if err != nil {
+			logger.Error("Error summarizing articles", "error", err)
+			continue
 		}
 
-		_, err := db.Exec(`
+		// for each summary, save to db
+		createdAt := time.Now().Format("2006-01-02 15:04:05")
+		for _, article := range summarizerResponse.Articles {
+			id := int64(snowflake.ID())
+			// merge sources
+			var sources []string
+			for _, source := range article.Sources {
+				sources = append(sources, normalizeSource(source))
+			}
+
+			_, err := db.Exec(`
 			INSERT INTO articles (id, title, excerpt, long_content, sources, links, category, ai_model, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, id, article.Title, article.Excerpt, article.LongContent, strings.Join(sources, ","), strings.Join(article.Sources, ","), article.Category, summarizerResponse.AiModel, createdAt)
-		if err != nil {
-			logger.Error("Error inserting article", "error", err)
-			return
+			if err != nil {
+				logger.Error("Error inserting article", "error", err)
+				return
+			}
+			logger.Debug("Article saved", "id", id)
 		}
 	}
 

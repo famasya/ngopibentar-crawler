@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/godruoyi/go-snowflake"
 	"resty.dev/v3"
 )
 
@@ -22,10 +23,29 @@ type Response struct {
 }
 
 type CrawlerResult struct {
+	ID          int64     `json:"id"`
 	Title       string    `json:"title"`
 	Content     string    `json:"content"`
 	Link        string    `json:"link"`
 	PublishedAt time.Time `json:"published_at"`
+	Source      string    `json:"source"`
+}
+
+func normalizeSource(source string) string {
+	switch {
+	case strings.Contains(source, "kompas"):
+		return "Kompas"
+	case strings.Contains(source, "cnn"):
+		return "CNN"
+	case strings.Contains(source, "liputan6"):
+		return "Liputan6"
+	case strings.Contains(source, "kumparan"):
+		return "Kumparan"
+	case strings.Contains(source, "cnbc"):
+		return "CNBC"
+	default:
+		return source
+	}
 }
 
 func StartCrawler(url string, client *resty.Client) (*[]CrawlerResult, error) {
@@ -74,10 +94,18 @@ func StartCrawler(url string, client *resty.Client) (*[]CrawlerResult, error) {
 			}
 		}
 
+		// omit short content
+		if len(*content) < 100 {
+			continue
+		}
+
+		id := int64(snowflake.ID())
 		results = append(results, CrawlerResult{
+			ID:          id,
 			Title:       post.Title,
 			Content:     *content,
 			Link:        post.Link,
+			Source:      normalizeSource(post.Link),
 			PublishedAt: post.PublishedAt,
 		})
 	}

@@ -35,6 +35,7 @@ type GeminiResponse struct {
 }
 
 func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
+	logger.Debug("Summarizing articles", "articles", payload)
 	if len(payload) == 0 {
 		return nil, fmt.Errorf("no articles to summarize")
 	}
@@ -64,7 +65,7 @@ func Summarize(payload []Summarizer) (*SummarizerResponse, error) {
 		[]*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}, &genai.GenerateContentConfig{
 			SystemInstruction: &genai.Content{
 				Parts: []*genai.Part{
-					{Text: systemInstruction},
+					{Text: systemInstructionSummarizer},
 				},
 			},
 			ResponseMIMEType: "application/json",
