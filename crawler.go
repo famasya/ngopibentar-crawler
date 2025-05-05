@@ -59,7 +59,7 @@ func StartCrawler(url string, client *resty.Client) (*[]CrawlerResult, error) {
 	}
 
 	var results []CrawlerResult
-	for _, post := range response.Items[:2] {
+	for _, post := range response.Items {
 		var content *string
 		switch {
 		case strings.Contains(post.Link, "kompas"):
